@@ -18,10 +18,6 @@ let speechSynthesis = window.speechSynthesis;
 let voices = [];
 let indonesianVoice = null;
 
-// Variabel untuk audio
-let announcementAudio;
-let isAudioInitialized = false;
-
 // Fungsi untuk mengatur tanggal dan waktu
 function updateDateTime() {
     const now = new Date();
@@ -41,105 +37,78 @@ function updateDateTime() {
     document.getElementById('current-year').textContent = now.getFullYear();
 }
 
-// Fungsi untuk inisialisasi audio
-function initializeAudio() {
-    // Buat elemen audio secara dinamis
-    announcementAudio = new Audio();
-    
-    // URL suara panggilan bandara (alternatif yang lebih reliable)
-    const audioUrls = [
-        "https://assets.mixkit.co/sfx/preview/mixkit-airport-announcement-1135.mp3",
-        "https://www.soundjay.com/buttons/beep-07.wav", // fallback
-        "https://www.soundjay.com/communication/telephone-ring-03a.wav" // fallback kedua
-    ];
-    
-    announcementAudio.src = audioUrls[0];
-    announcementAudio.preload = "auto";
-    announcementAudio.volume = 1.0;
-    
-    // Coba preload audio
-    announcementAudio.load();
-    
-    isAudioInitialized = true;
-    console.log("Audio initialized successfully");
-}
-
 // Fungsi untuk memuat suara yang tersedia
 function loadVoices() {
     voices = speechSynthesis.getVoices();
     
-    console.log("Available voices:", voices.length);
-    
     // Cari suara perempuan bahasa Indonesia
     indonesianVoice = voices.find(voice => 
-        voice.lang === 'id-ID' && voice.name.toLowerCase().includes('female')
+        voice.lang === 'id-ID' && voice.name.includes('Female')
     );
-    
-    // Jika tidak ditemukan suara Indonesia, cari suara Indonesia umum
-    if (!indonesianVoice) {
-        indonesianVoice = voices.find(voice => voice.lang === 'id-ID');
-    }
     
     // Jika tidak ditemukan suara Indonesia, gunakan suara Inggris perempuan
     if (!indonesianVoice) {
         indonesianVoice = voices.find(voice => 
-            voice.lang.startsWith('en') && voice.name.toLowerCase().includes('female')
+            voice.lang.startsWith('en') && voice.name.includes('Female')
         );
-    }
-    
-    // Jika tidak ditemukan suara Inggris perempuan, cari suara Inggris
-    if (!indonesianVoice) {
-        indonesianVoice = voices.find(voice => voice.lang.startsWith('en'));
     }
     
     // Jika tetap tidak ditemukan, gunakan suara pertama yang tersedia
     if (!indonesianVoice && voices.length > 0) {
         indonesianVoice = voices[0];
     }
-    
-    console.log("Selected voice:", indonesianVoice ? indonesianVoice.name : "No voice available");
 }
 
 // Fungsi untuk memanggil antrian dengan suara
 function callQueueWithVoice(queueNumber, operatorName) {
-    console.log(`Calling queue: ${queueNumber} for ${operatorName}`);
-    
-    // Hentikan suara yang sedang berlangsung
-    if (speechSynthesis.speaking) {
-        speechSynthesis.cancel();
-        console.log("Cancelled previous speech");
-    }
-    
     // Mainkan suara panggilan bandara terlebih dahulu
-    const playAnnouncement = () => {
-        if (!isAudioInitialized) {
-            initializeAudio();
+    const announcementSound = document.getElementById('announcement-sound');
+    
+    announcementSound.onended = function() {
+        // Setelah suara bandara selesai, ucapkan nomor antrian
+        if (speechSynthesis.speaking) {
+            speechSynthesis.cancel();
         }
         
-        announcementAudio.currentTime = 0;
-        announcementAudio.play().then(() => {
-            console.log("Announcement sound playing");
-            
-            // Setelah suara bandara selesai, ucapkan nomor antrian
-            announcementAudio.onended = () => {
-                console.log("Announcement sound ended, starting speech");
-                speakQueueNumber(queueNumber, operatorName);
-            };
-            
-        }).catch(error => {
-            console.log("Announcement audio error:", error);
-            // Jika audio gagal, langsung ucapkan nomor antrian
-            speakQueueNumber(queueNumber, operatorName);
-        });
+        const utterance = new SpeechSynthesisUtterance();
+        utterance.text = `Nomor antrian ${queueNumber}, silahkan menuju ke ${operatorName}`;
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        utterance.volume = 1;
+        
+        if (indonesianVoice) {
+            utterance.voice = indonesianVoice;
+        }
+        
+        speechSynthesis.speak(utterance);
     };
     
-    // Fungsi untuk mengucapkan nomor antrian
-    const speakQueueNumber = (queueNum, operator) => {
-        // Format nomor antrian untuk pengucapan (misal: A001 menjadi "A nol nol satu")
-        const queueForSpeech = queueNum.replace(/(\d)/g, ' $1 ').replace(/ 0/g, ' nol');
+    announcementSound.play().catch(e => {
+        console.log("Audio announcement error:", e);
+        // Jika audio gagal, langsung ucapkan nomor antrian
+        if (speechSynthesis.speaking) {
+            speechSynthesis.cancel();
+        }
         
-        // Buat teks untuk diucapkan
-        const speechText = `Nomor antrian ${queueForSpeech
+        const utterance = new SpeechSynthesisUtterance();
+        utterance.text = `Nomor antrian ${queueNumber}, silahkan menuju ke ${operatorName}`;
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        utterance.volume = 1;
+        
+        if (indonesianVoice) {
+            utterance.voice = indonesianVoice;
+        }
+        
+        speechSynthesis.speak(utterance);
+    });
+}
+
+// Fungsi untuk memanggil antrian
+function callQueue() {
+    const queueType = document.getElementById('queue-type').value;
+    let queueNumber = parseInt(document.getElementById('queue-number').value);
+    const operatorId = parseInt(document.getElementById('operator').value);
     
     // Validasi nomor antrian
     if (isNaN(queueNumber) || queueNumber < 1) {
